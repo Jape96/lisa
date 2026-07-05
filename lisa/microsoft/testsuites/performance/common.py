@@ -3,6 +3,7 @@
 import inspect
 import pathlib
 import time
+from decimal import Decimal
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
@@ -61,6 +62,20 @@ from lisa.util.process import ExecutableResult, Process
 
 # NTTTCP may need extra time after the requested run duration to emit totals.
 DEFAULT_NTTTCP_CLIENT_TIMEOUT_TOLERANCE_SECONDS = 60
+
+
+def _get_iperf_udp_bitrate(
+    udp_total_bitrate_gbps: Optional[Decimal], connections: int
+) -> str:
+    if udp_total_bitrate_gbps is None:
+        return ""
+    per_stream_bitrate_mbps = (
+        udp_total_bitrate_gbps * Decimal(1000) / Decimal(connections)
+    )
+    bitrate = format(per_stream_bitrate_mbps.normalize(), "f")
+    if "." in bitrate:
+        bitrate = bitrate.rstrip("0").rstrip(".")
+    return f"{bitrate}M"
 
 
 def perf_nvme(
@@ -399,12 +414,12 @@ def perf_ntttcp(  # noqa: C901
 
     try:
         client_ntttcp, server_ntttcp = run_in_parallel(
-            [lambda: client.tools[Ntttcp], lambda: server.tools[Ntttcp]]  # type: ignore
+            [lambda: client.tools[Ntttcp], lambda: server.tools[Ntttcp]]
         )
         client_lagscope, server_lagscope = run_in_parallel(
             [
-                lambda: client.tools[Lagscope],  # type: ignore
-                lambda: server.tools[Lagscope],  # type: ignore
+                lambda: client.tools[Lagscope],
+                lambda: server.tools[Lagscope],
             ]
         )
         # no need to set task max and reboot VM when connection less than 20480
@@ -762,10 +777,11 @@ def perf_iperf(
     connections: List[int],
     buffer_length_list: List[int],
     udp_mode: bool = False,
+    udp_total_bitrate_gbps: Optional[Decimal] = None,
     server: Optional[RemoteNode] = None,
     client: Optional[RemoteNode] = None,
     run_with_internal_address: bool = False,
-) -> None:
+) -> List[Union[NetworkTCPPerformanceMessage, NetworkUDPPerformanceMessage]]:
     if server is not None or client is not None:
         assert server is not None, "server need to be specified, if client is set"
         assert client is not None, "client need to be specified, if server is set"
@@ -777,10 +793,12 @@ def perf_iperf(
         server = cast(RemoteNode, environment.nodes[1])
 
     client_iperf3, server_iperf3 = run_in_parallel(
-        [lambda: client.tools[Iperf3], lambda: server.tools[Iperf3]]  # type: ignore
+        [lambda: client.tools[Iperf3], lambda: server.tools[Iperf3]]
     )
     test_case_name = inspect.stack()[1][3]
-    iperf3_messages_list: List[Any] = []
+    iperf3_messages_list: List[
+        Union[NetworkTCPPerformanceMessage, NetworkUDPPerformanceMessage]
+    ] = []
     server_interface_ip = ""
     client_interface_ip = ""
     if run_with_internal_address:
@@ -837,6 +855,11 @@ def perf_iperf(
                         report_unit="g",
                         port=current_client_port,
                         buffer_length=buffer_length,
+                        bitrate=(
+                            _get_iperf_udp_bitrate(udp_total_bitrate_gbps, connection)
+                            if udp_mode
+                            else ""
+                        ),
                         run_time_seconds=10,
                         parallel_number=num_threads_p,
                         ip_version="4",
@@ -874,6 +897,7 @@ def perf_iperf(
                 )
     for iperf3_message in iperf3_messages_list:
         notifier.notify(iperf3_message)
+    return iperf3_messages_list
 
 
 def perf_sockperf(
