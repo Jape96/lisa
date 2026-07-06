@@ -58,6 +58,7 @@ SUPPORTED_PASSTHROUGH_PLATFORMS = [CLOUD_HYPERVISOR, HYPERV]
 WINDOWS_NTTTCP_MAX_SERVER_THREADS = 64
 WINDOWS_NTTTCP_MAX_MIXED_TCP_CONNECTIONS = 512
 WINDOWS_NTTTCP_RECEIVER_WAIT_TIMEOUT = 90
+# Require peak delivered throughput to be at least 90% of the bottleneck NIC line rate.
 PASSTHROUGH_LINE_RATE_THRESHOLD = Decimal("0.90")
 # Target above line rate so UDP iperf saturates the NIC instead of using its
 # default 1 Mbit/s UDP bitrate.
@@ -259,6 +260,12 @@ class NetworkPerformance(TestSuite):
             )
 
         speed_value = Decimal(matched_speed.group("speed"))
+        if speed_value <= 0:
+            raise SkippedException(
+                f"NIC [{node.name}:{nic_name}] reported non-positive link speed "
+                f"[{speed}]. Verify the NIC link is up and reports a valid speed "
+                "before running passthrough line-rate validation."
+            )
         speed_unit = matched_speed.group("unit").lower()
         if speed_unit in ["mb/s", "mbps"]:
             return speed_value / Decimal(1000)
