@@ -8,6 +8,7 @@ from lisa.base_tools import Cat
 from lisa.operating_system import Windows
 from lisa.platform_ import Platform
 from lisa.sut_orchestrator import CLOUD_HYPERVISOR, HYPERV
+from lisa.sut_orchestrator.util.schema import HostDevicePoolType
 from lisa.testsuite import TestResult, simple_requirement
 from lisa.tools import Lspci
 from lisa.util import LisaException, SkippedException
@@ -85,6 +86,44 @@ class DevicePassthroughFunctionalTests(TestSuite):
         result: TestResult,
     ) -> None:
         lspci = node.tools[Lspci]
+        node_context = self._get_node_context(environment, node)
+
+        expected_devices = self._get_expected_devices(environment, node_context)
+        self._verify_devices_in_guest(lspci, expected_devices)
+
+    @TestCaseMetadata(
+        description="""
+            Check if two NIC passthrough devices are visible to one guest.
+
+            This testcase validates the generic device passthrough path for a
+            runbook that assigns two pci_net devices to a single guest. It reads
+            the runtime passthrough context, confirms at least two pci_net
+            devices were assigned, then verifies the assigned vendor/device IDs
+            are visible inside the guest with lspci.
+        """,
+        priority=4,
+        requirement=simple_requirement(
+            supported_platform_type=SUPPORTED_PASSTHROUGH_PLATFORMS,
+        ),
+    )
+    def verify_dual_device_passthrough_on_guest(
+        self,
+        node: Node,
+        environment: Environment,
+        result: TestResult,
+    ) -> None:
+        lspci = node.tools[Lspci]
+        node_context = self._get_node_context(environment, node)
+
+        expected_devices = self._get_expected_devices(
+            environment,
+            node_context,
+            pool_type_filter=HostDevicePoolType.PCI_NIC.value,
+            min_count=2,
+        )
+        self._verify_devices_in_guest(lspci, expected_devices)
+
+    def _get_node_context(self, environment: Environment, node: Node) -> Any:
         platform = environment.platform
         if platform is None:
             raise SkippedException(
@@ -115,9 +154,24 @@ class DevicePassthroughFunctionalTests(TestSuite):
         if not node_context.passthrough_devices:
             raise SkippedException("No passthrough devices are assigned to node")
 
+        return node_context
+
+    def _get_expected_devices(
+        self,
+        environment: Environment,
+        node_context: Any,
+        pool_type_filter: str = "",
+        min_count: int = 1,
+    ) -> Dict[Tuple[str, str, str], int]:
+        platform = environment.platform
+        assert platform is not None
         expected_devices: Dict[Tuple[str, str, str], int] = {}
+        matching_device_count = 0
         for passthrough_context in node_context.passthrough_devices:
             pool_type = str(passthrough_context.pool_type.value)
+            if pool_type_filter and pool_type != pool_type_filter:
+                continue
+
             if not passthrough_context.device_list:
                 raise LisaException(
                     f"No devices assigned to node for pool type: {pool_type}"
@@ -132,7 +186,25 @@ class DevicePassthroughFunctionalTests(TestSuite):
                     vendor_device_id["device_id"],
                 )
                 expected_devices[key] = expected_devices.get(key, 0) + 1
+                matching_device_count += 1
 
+        if matching_device_count < min_count:
+            pool_type_message = (
+                f" for pool type '{pool_type_filter}'" if pool_type_filter else ""
+            )
+            raise SkippedException(
+                f"Device passthrough validation requires at least {min_count} "
+                f"assigned device(s){pool_type_message}, found "
+                f"{matching_device_count}."
+            )
+
+        return expected_devices
+
+    @staticmethod
+    def _verify_devices_in_guest(
+        lspci: Lspci,
+        expected_devices: Dict[Tuple[str, str, str], int],
+    ) -> None:
         for (pool_type, ven_id, dev_id), expected_count in expected_devices.items():
             devices = lspci.get_devices_by_vendor_device_id(
                 vendor_id=ven_id,

@@ -1019,9 +1019,10 @@ class LisaRunner(BaseRunner):
                 Dict[str, Any], platform_extended_schemas_object
             )
             node_extended_schemas = cast(Dict[str, Any], node_extended_schemas_object)
+            # Platform schemas supply defaults; case requirements can narrow them.
             node_requirement.extended_schemas = deep_update_dict(
-                platform_extended_schemas,
                 node_extended_schemas,
+                platform_extended_schemas,
             )
             if index < len(environment_requirement.nodes):
                 environment_requirement.nodes[index] = node_requirement

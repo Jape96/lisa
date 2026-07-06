@@ -27,7 +27,8 @@ from lisa import (
 from lisa.environment import Environment, Node
 from lisa.operating_system import Windows
 from lisa.sut_orchestrator import CLOUD_HYPERVISOR, HYPERV
-from lisa.testsuite import TestResult
+from lisa.sut_orchestrator.util.schema import HostDevicePoolType
+from lisa.testsuite import TestCaseRequirement, TestResult
 from lisa.tools import Dhclient, Kill, PowerShell, Sysctl
 from lisa.tools.ip import Ip
 from lisa.tools.iperf3 import (
@@ -51,6 +52,37 @@ SUPPORTED_PASSTHROUGH_PLATFORMS = [CLOUD_HYPERVISOR, HYPERV]
 WINDOWS_NTTTCP_MAX_SERVER_THREADS = 64
 WINDOWS_NTTTCP_MAX_MIXED_TCP_CONNECTIONS = 512
 WINDOWS_NTTTCP_RECEIVER_WAIT_TIMEOUT = 90
+
+
+def _two_guest_passthrough_requirement() -> TestCaseRequirement:
+    node = schema.NodeSpace(
+        node_count=2,
+        memory_mb=search_space.IntRange(min=8192),
+        extended_schemas={
+            CLOUD_HYPERVISOR: {
+                "device_passthrough": [
+                    {
+                        "pool_type": HostDevicePoolType.PCI_NIC.value,
+                        "managed": "yes",
+                        "count": 1,
+                    }
+                ]
+            },
+            HYPERV: {
+                "device_passthrough": [
+                    {
+                        "pool_type": HostDevicePoolType.PCI_NIC.value,
+                        "count": 1,
+                    }
+                ]
+            },
+        },
+    )
+
+    return node_requirement(
+        node=node,
+        supported_platform_type=SUPPORTED_PASSTHROUGH_PLATFORMS,
+    )
 
 
 @TestSuiteMetadata(
@@ -353,11 +385,7 @@ class NetworkPerformance(TestSuite):
         """,
         priority=3,
         timeout=TIMEOUT,
-        requirement=simple_requirement(
-            min_count=2,
-            supported_platform_type=SUPPORTED_PASSTHROUGH_PLATFORMS,
-            unsupported_os=[Windows],
-        ),
+        requirement=_two_guest_passthrough_requirement(),
     )
     def perf_tcp_iperf_passthrough_two_guest(
         self, result: TestResult, log_path: Path
@@ -391,11 +419,7 @@ class NetworkPerformance(TestSuite):
         """,
         priority=3,
         timeout=TIMEOUT,
-        requirement=simple_requirement(
-            min_count=2,
-            supported_platform_type=SUPPORTED_PASSTHROUGH_PLATFORMS,
-            unsupported_os=[Windows],
-        ),
+        requirement=_two_guest_passthrough_requirement(),
     )
     def perf_udp_iperf_passthrough_two_guest(
         self, result: TestResult, log_path: Path
@@ -432,11 +456,7 @@ class NetworkPerformance(TestSuite):
         """,
         priority=3,
         timeout=PPS_TIMEOUT,
-        requirement=simple_requirement(
-            min_count=2,
-            supported_platform_type=SUPPORTED_PASSTHROUGH_PLATFORMS,
-            unsupported_os=[Windows],
-        ),
+        requirement=_two_guest_passthrough_requirement(),
     )
     def perf_tcp_single_pps_passthrough_two_guest(
         self, result: TestResult, log_path: Path
@@ -471,11 +491,7 @@ class NetworkPerformance(TestSuite):
         """,
         priority=3,
         timeout=PPS_TIMEOUT,
-        requirement=simple_requirement(
-            min_count=2,
-            supported_platform_type=SUPPORTED_PASSTHROUGH_PLATFORMS,
-            unsupported_os=[Windows],
-        ),
+        requirement=_two_guest_passthrough_requirement(),
     )
     def perf_tcp_max_pps_passthrough_two_guest(
         self, result: TestResult, log_path: Path
@@ -509,13 +525,7 @@ class NetworkPerformance(TestSuite):
         """,
         priority=3,
         timeout=TIMEOUT,
-        requirement=node_requirement(
-            node=schema.NodeSpace(
-                node_count=2,
-                memory_mb=search_space.IntRange(min=8192),
-            ),
-            supported_platform_type=SUPPORTED_PASSTHROUGH_PLATFORMS,
-        ),
+        requirement=_two_guest_passthrough_requirement(),
     )
     def perf_tcp_ntttcp_passthrough_two_guest(
         self, result: TestResult, log_path: Path
@@ -565,13 +575,7 @@ class NetworkPerformance(TestSuite):
         """,
         priority=3,
         timeout=TIMEOUT,
-        requirement=node_requirement(
-            node=schema.NodeSpace(
-                node_count=2,
-                memory_mb=search_space.IntRange(min=8192),
-            ),
-            supported_platform_type=SUPPORTED_PASSTHROUGH_PLATFORMS,
-        ),
+        requirement=_two_guest_passthrough_requirement(),
     )
     def perf_udp_1k_ntttcp_passthrough_two_guest(
         self, result: TestResult, log_path: Path
