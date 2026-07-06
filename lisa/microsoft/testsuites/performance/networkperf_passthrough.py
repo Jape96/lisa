@@ -270,6 +270,12 @@ class NetworkPerformance(TestSuite):
         )
 
     @staticmethod
+    def _to_decimal(value: Union[Decimal, float, int]) -> Decimal:
+        if isinstance(value, Decimal):
+            return value
+        return Decimal(str(value))
+
+    @staticmethod
     def _get_delivered_throughput_samples(
         messages: List[NetworkThroughputMessage],
     ) -> List[Tuple[str, Decimal, NetworkThroughputMessage]]:
@@ -283,7 +289,9 @@ class NetworkPerformance(TestSuite):
                     samples.append(
                         (
                             f"{sample_name}, udp-rx",
-                            message.rx_throughput_in_gbps,
+                            NetworkPerformance._to_decimal(
+                                message.rx_throughput_in_gbps
+                            ),
                             message,
                         )
                     )
@@ -292,19 +300,27 @@ class NetworkPerformance(TestSuite):
                     samples.append(
                         (
                             f"{sample_name}, tcp-rx",
-                            message.rx_throughput_in_gbps,
+                            NetworkPerformance._to_decimal(
+                                message.rx_throughput_in_gbps
+                            ),
                             message,
                         )
                     )
                 elif message.throughput_in_gbps > 0:
                     samples.append(
-                        (f"{sample_name}, tcp", message.throughput_in_gbps, message)
+                        (
+                            f"{sample_name}, tcp",
+                            NetworkPerformance._to_decimal(message.throughput_in_gbps),
+                            message,
+                        )
                     )
                 elif message.tx_throughput_in_gbps > 0:
                     samples.append(
                         (
                             f"{sample_name}, tcp-tx",
-                            message.tx_throughput_in_gbps,
+                            NetworkPerformance._to_decimal(
+                                message.tx_throughput_in_gbps
+                            ),
                             message,
                         )
                     )
